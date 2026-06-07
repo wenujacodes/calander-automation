@@ -7,7 +7,6 @@
     "start": "node src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wenujacodes/calander-automation.git"
@@ -22,11 +21,10 @@
   "homepage": "https://github.com/wenujacodes/calander-automation#readme",
   "dependencies": {
     "axios": "^1.17.0",
+    "better-sqlite3": "^12.10.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "xlsx": "^0.18.5"
   }
 }
-
-

@@ -3,6 +3,11 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { fetchAndParseTimetable } = require("./services/sheetService");
+const { initializeDatabase } = require("./db/init");
+const { saveTimetableEvents, getDatabaseStats } = require("./db/service");
+
+// Initialize database on startup
+initializeDatabase();
 
 const app = express();
 
@@ -22,7 +27,80 @@ app.get("/", (req, res) => {
 });
 
 /**
- * [TEMPORARY] Preview endpoint for debugging timetable parsing
+ * [TEMP] Sync timetable to database
+ * Fetches latest timetable and saves to SQLite
+ * Detects if content is unchanged (skips if same)
+ * GET /timetable/sync
+ *
+ * Response:
+ * {
+ *   "success": true,
+ *   "saved": true,
+ *   "insertedCount": 5,
+ *   "updatedCount": 2,
+ *   "totalEvents": 110,
+ *   "message": "Timetable synced to database"
+ * }
+ */
+app.get("/timetable/sync", async (req, res) => {
+  try {
+    console.log("[Server] GET /timetable/sync - Syncing to database");
+
+    // Fetch latest timetable
+    const events = await fetchAndParseTimetable();
+
+    // Save to database
+    const saveResult = saveTimetableEvents(events, "sync");
+
+    res.json({
+      success: true,
+      ...saveResult,
+      message: saveResult.saved
+        ? "Timetable synced to database"
+        : "Timetable already up-to-date",
+    });
+  } catch (error) {
+    console.error("[Server] /timetable/sync error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Get database statistics and metadata
+ * Shows event counts, types, and version history
+ * GET /timetable/stats
+ *
+ * Response:
+ * {
+ *   "totalEvents": 110,
+ *   "eventTypes": { "lecture": 70, "lab": 15, ... },
+ *   "latestVersion": { "hash": "abc123...", "fetchedAt": "..." },
+ *   "totalVersions": 3
+ * }
+ */
+app.get("/timetable/stats", (req, res) => {
+  try {
+    console.log("[Server] GET /timetable/stats - Fetching database stats");
+    const stats = getDatabaseStats();
+
+    res.json({
+      success: true,
+      stats,
+    });
+  } catch (error) {
+    console.error("[Server] /timetable/stats error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * [TEMP] Preview endpoint for debugging timetable parsing
  * Returns summary statistics, event type counts, and first 20 events
  * Validates event completeness and detects issues
  * GET /timetable/preview
@@ -187,4 +265,6 @@ app.listen(PORT, () => {
   console.log(`  GET  / - Health check`);
   console.log(`  GET  /timetable - Get parsed timetable events`);
   console.log(`  GET  /timetable/preview - [TEMP] Debug preview with validation`);
+  console.log(`  GET  /timetable/sync - [TEMP] Sync timetable to database`);
+  console.log(`  GET  /timetable/stats - Get database statistics`);
 });

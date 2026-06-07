@@ -136,7 +136,7 @@ function convertToISODate(dateValue) {
 function classifyEventType(title) {
   if (!title) return "event";
 
-  const lowerTitle = title.toLowerCase();
+  const lowerTitle = String(title).toLowerCase();
 
   // Check against keyword categories
   for (const [type, keywords] of Object.entries(EVENT_TYPE_KEYWORDS)) {

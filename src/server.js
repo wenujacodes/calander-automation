@@ -5,6 +5,11 @@ const cors = require("cors");
 const { fetchAndParseTimetable } = require("./services/sheetService");
 const { initializeDatabase } = require("./db/init");
 const { saveTimetableEvents, getDatabaseStats } = require("./db/service");
+const {
+  detectChanges,
+  getChangedEventsOnly,
+  simulateUpdate,
+} = require("./services/changeDetectionService");
 
 // Initialize database on startup
 initializeDatabase();
@@ -248,6 +253,119 @@ app.get("/timetable", async (req, res) => {
 });
 
 /**
+ * [PHASE 2] Detect changes between current and database timetable
+ * Identifies added, removed, and modified events
+ * Used to sync only deltas to Google Calendar
+ * GET /timetable/changes
+ *
+ * Response:
+ * {
+ *   "hasChanges": true,
+ *   "summary": { "added": 5, "removed": 2, "modified": 3, "unchanged": 100 },
+ *   "changePercentage": 10,
+ *   "added": [...],
+ *   "removed": [...],
+ *   "modified": [...]
+ * }
+ */
+app.get("/timetable/changes", async (req, res) => {
+  try {
+    console.log("[Server] GET /timetable/changes - Detecting changes");
+
+    // Fetch latest timetable
+    const currentEvents = await fetchAndParseTimetable();
+
+    // Detect changes
+    const changes = detectChanges(currentEvents);
+
+    res.json({
+      success: true,
+      ...changes,
+    });
+  } catch (error) {
+    console.error("[Server] /timetable/changes error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * [PHASE 2] Get only changed events (added + modified)
+ * Efficient for syncing only deltas
+ * GET /timetable/deltas
+ *
+ * Response:
+ * {
+ *   "hasChanges": true,
+ *   "added": [...],
+ *   "modified": [...],
+ *   "removed": [...],
+ *   "summary": { "added": 5, "modified": 3, "removed": 2 }
+ * }
+ */
+app.get("/timetable/deltas", async (req, res) => {
+  try {
+    console.log("[Server] GET /timetable/deltas - Getting delta events");
+
+    // Fetch latest timetable
+    const currentEvents = await fetchAndParseTimetable();
+
+    // Get only changed events
+    const deltas = getChangedEventsOnly(currentEvents);
+
+    res.json({
+      success: true,
+      ...deltas,
+    });
+  } catch (error) {
+    console.error("[Server] /timetable/deltas error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * [TEMP] Simulate timetable update for testing change detection
+ * Modifies some events and adds a new one
+ * GET /timetable/simulate-update
+ */
+app.get("/timetable/simulate-update", async (req, res) => {
+  try {
+    console.log("[Server] GET /timetable/simulate-update - Simulating update");
+
+    // Fetch current timetable
+    const currentEvents = await fetchAndParseTimetable();
+
+    // Simulate update
+    const updatedEvents = simulateUpdate(currentEvents, 5);
+
+    // Detect changes
+    const changes = detectChanges(updatedEvents);
+
+    res.json({
+      success: true,
+      message: "Simulated update completed",
+      originalCount: currentEvents.length,
+      updatedCount: updatedEvents.length,
+      ...changes,
+    });
+  } catch (error) {
+    console.error(
+      "[Server] /timetable/simulate-update error:",
+      error.message
+    );
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * 404 handler for undefined routes
  */
 app.use((req, res) => {
@@ -267,4 +385,7 @@ app.listen(PORT, () => {
   console.log(`  GET  /timetable/preview - [TEMP] Debug preview with validation`);
   console.log(`  GET  /timetable/sync - [TEMP] Sync timetable to database`);
   console.log(`  GET  /timetable/stats - Get database statistics`);
+  console.log(`  GET  /timetable/changes - [PHASE 2] Detect all changes`);
+  console.log(`  GET  /timetable/deltas - [PHASE 2] Get only changed events`);
+  console.log(`  GET  /timetable/simulate-update - [TEMP] Test change detection`);
 });

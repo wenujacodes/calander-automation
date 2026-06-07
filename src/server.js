@@ -1,13 +1,15 @@
 const express = require("express");
-const cors = require("cors");
 
 const app = express();
-app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("Uni Calendar API running");
+  res.send("ROOT OK");
+});
+
+app.get("/timetable", (req, res) => {
+  res.json({ status: "timetable OK" });
 });
 
 app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+  console.log("Server running on 3000");
 });

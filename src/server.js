@@ -22,6 +22,116 @@ app.get("/", (req, res) => {
 });
 
 /**
+ * [TEMPORARY] Preview endpoint for debugging timetable parsing
+ * Returns summary statistics, event type counts, and first 20 events
+ * Validates event completeness and detects issues
+ * GET /timetable/preview
+ *
+ * Response format:
+ * {
+ *   "totalEvents": 110,
+ *   "eventTypes": { "lecture": 70, "lab": 15, ... },
+ *   "sortingValid": true,
+ *   "duplicatesDetected": 0,
+ *   "sampleEvents": [...first 20 events...],
+ *   "validationWarnings": [...]
+ * }
+ */
+app.get("/timetable/preview", async (req, res) => {
+  try {
+    console.log("[Server] GET /timetable/preview - Debug preview");
+    const events = await fetchAndParseTimetable();
+
+    // Event type summary
+    const eventTypeSummary = {};
+    events.forEach((event) => {
+      eventTypeSummary[event.type] = (eventTypeSummary[event.type] || 0) + 1;
+    });
+
+    // Validate sorting (should be sorted by date and startTime)
+    let sortingValid = true;
+    for (let i = 1; i < events.length; i++) {
+      const prev = events[i - 1];
+      const curr = events[i];
+      const dateCompare = prev.date.localeCompare(curr.date);
+      if (dateCompare > 0 || (dateCompare === 0 && prev.startTime > curr.startTime)) {
+        sortingValid = false;
+        console.warn(
+          `[Debug] Sorting issue: "${prev.title}" (${prev.date} ${prev.startTime}) comes after "${curr.title}" (${curr.date} ${curr.startTime})`
+        );
+      }
+    }
+
+    // Detect duplicate events (same title, date, and time)
+    const eventSignatures = new Set();
+    const duplicates = [];
+    events.forEach((event) => {
+      const signature = `${event.title}|${event.date}|${event.startTime}|${event.endTime}`;
+      if (eventSignatures.has(signature)) {
+        duplicates.push({
+          title: event.title,
+          date: event.date,
+          startTime: event.startTime,
+          endTime: event.endTime,
+        });
+      }
+      eventSignatures.add(signature);
+    });
+
+    // Validation warnings for incomplete events
+    const validationWarnings = [];
+    events.forEach((event, index) => {
+      const issues = [];
+      if (!event.title || !event.title.trim()) issues.push("missing title");
+      if (!event.date) issues.push("missing date");
+      if (!event.startTime) issues.push("missing start time");
+      if (!event.endTime) issues.push("missing end time");
+
+      if (issues.length > 0) {
+        const warning = {
+          eventIndex: index,
+          issues,
+          event: event,
+        };
+        validationWarnings.push(warning);
+        console.warn(
+          `[Debug] Event #${index} has issues: ${issues.join(", ")}`,
+          event
+        );
+      }
+    });
+
+    // Get first 20 events
+    const sampleEvents = events.slice(0, 20);
+
+    const preview = {
+      totalEvents: events.length,
+      eventTypes: eventTypeSummary,
+      sortingValid,
+      duplicatesDetected: duplicates.length,
+      sampleEvents,
+    };
+
+    // Add warnings and duplicates only if they exist
+    if (duplicates.length > 0) {
+      preview.duplicates = duplicates;
+    }
+    if (validationWarnings.length > 0) {
+      preview.validationWarnings = validationWarnings;
+    }
+
+    res.json(preview);
+  } catch (error) {
+    console.error("[Server] /timetable/preview endpoint error:", error.message);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to preview timetable",
+      error: error.message,
+    });
+  }
+});
+
+/**
  * Timetable endpoint: Returns parsed timetable events from the Excel sheet
  * GET /timetable
  *
@@ -76,4 +186,5 @@ app.listen(PORT, () => {
   console.log(`[Server] Available endpoints:`);
   console.log(`  GET  / - Health check`);
   console.log(`  GET  /timetable - Get parsed timetable events`);
+  console.log(`  GET  /timetable/preview - [TEMP] Debug preview with validation`);
 });
